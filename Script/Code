@@ -1,0 +1,26 @@
+
+* ==============================================================
+* Taller: Parte 2.2 Describiendo datos
+* Herrmann et al. (2008) - Figuras 2A y 3
+* Archivo: doing-economics-datafile-working-in-excel-project-2 (1).xlsx
+* ==============================================================
+
+* 1. Definir la carpeta de trabajo
+cd "C:\Users\prestamour\Downloads"
+
+* 2. Cargar el experimento SIN CASTIGO (Figura 3)
+import excel "doing-economics-datafile-working-in-excel-project-2 (1).xlsx", sheet("Public goods contributions") cellrange(A2:Q12) firstrow clear
+
+* Renombrar y calcular promedio por período
+rename Period periodo
+egen promedio_sin_castigo = rowmean(Copenhagen-Melbourne)
+list periodo promedio_sin_castigo
+
+
+* 3. Cargar el experimento CON CASTIGO (Figura 2A)
+import excel "doing-economics-datafile-working-in-excel-project-2 (1).xlsx", sheet("Public goods contributions") cellrange(A16:Q26) firstrow clear
+
+* Renombrar y calcular promedio por período
+rename Period periodo
+egen promedio_con_castigo = rowmean(Copenhagen-Melbourne)
+list periodo promedio_con_castigo
