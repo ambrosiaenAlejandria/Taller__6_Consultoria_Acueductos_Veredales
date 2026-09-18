@@ -24,3 +24,36 @@ import excel "doing-economics-datafile-working-in-excel-project-2 (1).xlsx", she
 rename Period periodo
 egen promedio_con_castigo = rowmean(Copenhagen-Melbourne)
 list periodo promedio_con_castigo
+
+* ============================================================
+* P2.2.5 - Tabla de estadísticas descriptivas
+* Media, varianza, sd, mínimo, máximo y rango
+* ============================================================
+
+* SIN CASTIGO ----------
+import excel "C:\Users\prestamour\Downloads\doing-economics-datafile-working-in-excel-project-2.xlsx", sheet("Public goods contributions") cellrange(A2:Q12) firstrow clear
+
+egen media_sc    = rowmean(Copenhagen Dnipropetrovsk Minsk StGallen Muscat Samara Zurich Boston Bonn Chengdu Seoul Riyadh Nottingham Athens Istanbul Melbourne)
+egen sd_sc       = rowsd(Copenhagen Dnipropetrovsk Minsk StGallen Muscat Samara Zurich Boston Bonn Chengdu Seoul Riyadh Nottingham Athens Istanbul Melbourne)
+egen max_sc      = rowmax(Copenhagen Dnipropetrovsk Minsk StGallen Muscat Samara Zurich Boston Bonn Chengdu Seoul Riyadh Nottingham Athens Istanbul Melbourne)
+egen min_sc      = rowmin(Copenhagen Dnipropetrovsk Minsk StGallen Muscat Samara Zurich Boston Bonn Chengdu Seoul Riyadh Nottingham Athens Istanbul Melbourne)
+
+gen var_sc   = sd_sc^2
+gen rango_sc = max_sc - min_sc
+
+display "===== SIN CASTIGO ====="
+list Period media_sc var_sc sd_sc min_sc max_sc rango_sc if Period == 1 | Period == 10
+
+* ---------- CON CASTIGO ----------
+import excel "C:\Users\prestamour\Downloads\doing-economics-datafile-working-in-excel-project-2.xlsx", sheet("Public goods contributions") cellrange(A16:Q26) firstrow clear
+
+egen media_cc    = rowmean(Copenhagen Dnipropetrovsk Minsk StGallen Muscat Samara Zurich Boston Bonn Chengdu Seoul Riyadh Nottingham Athens Istanbul Melbourne)
+egen sd_cc       = rowsd(Copenhagen Dnipropetrovsk Minsk StGallen Muscat Samara Zurich Boston Bonn Chengdu Seoul Riyadh Nottingham Athens Istanbul Melbourne)
+egen max_cc      = rowmax(Copenhagen Dnipropetrovsk Minsk StGallen Muscat Samara Zurich Boston Bonn Chengdu Seoul Riyadh Nottingham Athens Istanbul Melbourne)
+egen min_cc      = rowmin(Copenhagen Dnipropetrovsk Minsk StGallen Muscat Samara Zurich Boston Bonn Chengdu Seoul Riyadh Nottingham Athens Istanbul Melbourne)
+
+gen var_cc   = sd_cc^2
+gen rango_cc = max_cc - min_cc
+
+display "===== CON CASTIGO ====="
+list Period media_cc var_cc sd_cc min_cc max_cc rango_cc if Period == 1 | Period == 10
