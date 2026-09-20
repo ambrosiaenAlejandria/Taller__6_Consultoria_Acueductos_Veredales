@@ -24,7 +24,7 @@ if strpos("$github", "raw.githubusercontent.com") == 0 {
  
 * 0.2 Dónde va a guardar Stata los resultados
 
-/* 
+
 global carpeta "C:/Users/Emily/OneDrive/Documentos/Haciendo Economía/Taller 6"        // ejemplo: "C:/Users/prestamour/Documents/Taller6"
  
 if "$carpeta" != "" {
@@ -36,7 +36,7 @@ display as text "Carpeta de trabajo: " c(pwd)
  
 * Dos subcarpetas para las salidas ("capture" = si ya existen, no pasa nada)
 capture mkdir "Figures"
-capture mkdir "Tables"*/
+capture mkdir "Tables"
  
 * Bitácora, donde se deja un archivo de texto con todo lo que aparece en pantalla
 *------------------------------------------------------------------------------
@@ -48,7 +48,7 @@ log using "taller6_log.log", replace text
 * El comando "copy" copia un archivo desde internet a la carpeta de trabajo.
 copy "$github/Game_History_Propio.xlsx" "Game_History_Propio.xlsx", replace
 copy "$github/Figuras_2A_y_3.xlsx"      "Figuras_2A_y_3.xlsx",      replace
-copy "$github/lanzamientos_moneda.csv" "lanzamientos_moneda.csv", replace
+copy "$github/lanzamientos_moneda.xlsx" "lanzamientos_moneda.xlsx", replace
  
 display as result "Archivos descargados."
  
@@ -531,36 +531,90 @@ twoway (scatter contribucion posicion if castigo==0,                            
 graph export "Figures/fig5_dispersion_p1_p10.png", replace width(2200)
  
  
-*===============================================================================
+*===============================================================
 * PARTE 6. Experimento moneda
-*===============================================================================
- 
-capture confirm file "lanzamientos_moneda.csv"
+*===============================================================
+
+capture confirm file "lanzamientos_moneda.xlsx"
 if _rc != 0 {
-    display as error "No se encontró lanzamientos_moneda.csv. P2.3.1 queda pendiente."
+    display as error "No se encontró lanzamientos_moneda.xlsx. P2.3.1 queda pendiente."
 }
 else {
-    import delimited using "lanzamientos_moneda.csv", clear varnames(1) stringcols(3)
- 
-    capture confirm string variable resultado
-    if _rc != 0 {
+
+    * --- BLOQUE 1: importar el Excel como texto, sin suponer encabezados ---
+    * allstring: todo entra como texto, así nada se pierde al convertir.
+    * Sin firstrow: la fila de títulos entra como dato y la borramos en el Bloque 4.
+    import excel using "lanzamientos_moneda.xlsx", clear allstring
+
+    * --- BLOQUE 2: limpiar caracteres invisibles y botar columnas vacías ---
+    foreach v of varlist _all {
+        quietly replace `v' = subinstr(`v', char(13), "", .)
+        quietly replace `v' = subinstr(`v', char(10), "", .)
+        quietly replace `v' = subinstr(`v', char(34), "", .)
+        quietly replace `v' = trim(itrim(`v'))
+        quietly count if `v' != ""
+        if r(N) == 0 drop `v'
+    }
+
+    * --- BLOQUE 3: ¿los datos quedaron pegados en una sola columna? ---
+    unab todas : _all
+    local nvars : word count `todas'
+
+    if `nvars' == 1 {
+        * Caso "1,1,cara" dentro de una sola celda: lo separamos nosotros.
+        local unica : word 1 of `todas'
+        split `unica', parse("," ";") generate(parte)
+        drop `unica'
+        rename parte1 tanda
+        rename parte2 lanzamiento
+        rename parte3 resultado
+    }
+    else {
+        * Caso correcto: tres columnas separadas (A, B, C).
+        local v1 : word 1 of `todas'
+        local v2 : word 2 of `todas'
+        local v3 : word 3 of `todas'
+        rename `v1' tanda
+        rename `v2' lanzamiento
+        rename `v3' resultado
+        keep tanda lanzamiento resultado
+    }
+
+    * --- BLOQUE 4: borrar la fila de encabezado y las filas vacías ---
+    drop if lower(trim(tanda)) == "tanda"
+    drop if trim(tanda) == "" & trim(resultado) == ""
+
+    * --- BLOQUE 5: normalizar los valores ---
+    replace resultado = lower(trim(itrim(resultado)))
+    drop if resultado == ""
+
+    destring tanda,       replace force
+    destring lanzamiento, replace force
+
+    * --- BLOQUE 6: validar (mostrando el problema si lo hay) ---
+    if _N == 0 {
         display as error "La plantilla está vacía: registren primero los lanzamientos reales."
     }
     else {
-        replace resultado = lower(trim(resultado))
-        drop if resultado == ""
-        assert resultado=="cara" | resultado=="sello"
- 
+        quietly count if resultado != "cara" & resultado != "sello"
+        if r(N) > 0 {
+            display as error "Hay `r(N)' valores que no son cara/sello:"
+            list tanda lanzamiento resultado if resultado != "cara" & resultado != "sello", noobs clean
+        }
+        assert resultado == "cara" | resultado == "sello"
+
+        * --- BLOQUE 7: análisis y exportación ---
         generate cara = 0
-        replace  cara = 1 if resultado=="cara"
- 
+        replace  cara = 1 if resultado == "cara"
+
         display as result "=== Número de caras en cada tanda ==="
         tabstat cara, by(tanda) statistics(sum n mean) format(%9.3f)
- 
+
         display as result "=== Secuencia de cada tanda ==="
         sort tanda lanzamiento
         list tanda lanzamiento resultado, noobs clean
- 
+
+        capture mkdir "Tables"
         export delimited using "Tables/tabla_4_moneda.csv", replace
     }
 }
@@ -569,3 +623,4 @@ else {
 * FIN
 *===============================================================================
 log close
+ 
