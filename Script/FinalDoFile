@@ -1,0 +1,571 @@
+* TALLER 6: Consultoria de acueductos veredales
+* Curso: Haciendo Economía
+* Nombres: Alejandro Cotrino, Emanuel Hernandez, Emily Rodríguez y Danna Romero
+*
+
+* Configuración
+
+clear all              // borra todo lo que Stata tenga en memoria
+set more off           // evita que Stata se detenga cada vez que llena la pantalla
+version 14             // fija la versión del lenguaje: el código no cambia con el tiempo
+set seed 20260920      // semilla fija (regla del curso; aquí no hay sorteos)
+
+* Dirección del repositorio en GitHub
+*------------------------------------------------------------
+global github "https://raw.githubusercontent.com/ambrosiaenAlejandria/Taller__6_Consultoria_Acueductos_Veredales/refs/heads/main/Data"
+ 
+* Revisión automática. Si la dirección está mal, el do-file se detiene aquí
+* con un mensaje claro, en vez de fallar más adelante sin explicación.
+if strpos("$github", "raw.githubusercontent.com") == 0 {
+    display as error "La dirección de GitHub está mal escrita."
+    display as error "Debe empezar por https://raw.githubusercontent.com (ver instrucciones arriba)."
+    exit 198
+}
+ 
+* 0.2 Dónde va a guardar Stata los resultados
+
+/* 
+global carpeta "C:/Users/Emily/OneDrive/Documentos/Haciendo Economía/Taller 6"        // ejemplo: "C:/Users/prestamour/Documents/Taller6"
+ 
+if "$carpeta" != "" {
+    capture mkdir "$carpeta"
+    cd "$carpeta"
+}
+ 
+display as text "Carpeta de trabajo: " c(pwd)
+ 
+* Dos subcarpetas para las salidas ("capture" = si ya existen, no pasa nada)
+capture mkdir "Figures"
+capture mkdir "Tables"*/
+ 
+* Bitácora, donde se deja un archivo de texto con todo lo que aparece en pantalla
+*------------------------------------------------------------------------------
+capture log close
+log using "taller6_log.log", replace text
+ 
+* Descarga de los archivos crudos desde GitHub
+*------------------------------------------------------------------------------
+* El comando "copy" copia un archivo desde internet a la carpeta de trabajo.
+copy "$github/Game_History_Propio.xlsx" "Game_History_Propio.xlsx", replace
+copy "$github/Figuras_2A_y_3.xlsx"      "Figuras_2A_y_3.xlsx",      replace
+copy "$github/lanzamientos_moneda.csv" "lanzamientos_moneda.csv", replace
+ 
+display as result "Archivos descargados."
+ 
+ 
+*===============================================================================
+* PARTE 1. Importar los resultados del juego en clase 
+* Archivo: Game_History_Propio.xlsx, hoja "Datos"
+*===============================================================================
+ 
+* Se importa desde la fila 2 y no se usa la primera fila como nombres de
+* variable, porque los encabezados originales llevan tildes y el símbolo del
+* euro, y Stata no los acepta como nombres. Al no usarlos, Stata llama a las
+* columnas A, B, C, D, E, y nosotros les ponemos el nombre que queremos.
+import excel using "Game_History_Propio.xlsx", sheet("Datos") cellrange(A2) clear
+ 
+rename (A B C D E) (juego ronda jugador contribucion pago)
+ 
+label variable juego        "Juego (1 o 2)"
+label variable ronda        "Período o ronda (1 a 10)"
+label variable jugador      "Jugador"
+label variable contribucion "Contribución al proyecto grupal (euros)"
+label variable pago         "Pago neto de la ronda (euros)"
+ 
+*--- Revisión de que los datos llegaron completos -------------------------------
+* "assert" comprueba que algo sea cierto. Si NO lo es, el do-file se detiene.
+* Sirve para darse cuenta si el archivo cambió.
+count
+assert _N == 440                         // 22 jugadores x 10 rondas x 2 juegos
+assert contribucion >= 0
+ 
+* Cuántos jugadores hay realmente
+quietly levelsof jugador, local(lista_jugadores)
+display as result "Número de jugadores en el archivo: " `: word count `lista_jugadores''
+ 
+*--- Cómo calculó el aplicativo el pago de cada ronda ---------------------------
+* Regla los datos
+* pago = redondeo(2 x contribución promedio de la ronda) - contribución propia
+bysort juego ronda: egen double promedio_ronda = mean(contribucion)
+generate pago_esperado = round(2*promedio_ronda) - contribucion
+assert pago == pago_esperado
+drop promedio_ronda pago_esperado
+ 
+save "juego_propio.dta", replace
+display as result "Base del juego de clase lista: juego_propio.dta"
+ 
+ 
+*===============================================================================
+* PARTE 2. Importar datos de HERRMANN, THÖNI Y GÄCHTER (2008)
+* Archivo: Figuras_2A_y_3.xlsx, hoja "Public goods contributions"
+
+*   filas  3 a 12 -> Figura 3  = experimento SIN castigo
+*   filas 17 a 26 -> Figura 2A = experimento CON castigo
+*===============================================================================
+ 
+* 2.1 Bloque SIN castigo (Figura 3)
+*-------------------------------------------------------------------------------
+
+import excel using "Figuras_2A_y_3.xlsx", ///
+    sheet("Public goods contributions") cellrange(A3:Q12) clear
+ 
+rename (A B C D E F G H I J K L M N O P Q)                                    ///
+       (periodo grupo1 grupo2 grupo3 grupo4 grupo5 grupo6 grupo7 grupo8       ///
+        grupo9 grupo10 grupo11 grupo12 grupo13 grupo14 grupo15 grupo16)
+ 
+generate castigo = 0          // 0 = experimento sin castigo
+save "temporal_sin_castigo.dta", replace
+ 
+* 2.2 Bloque CON castigo (Figura 2A)
+*------------------------------------------------------------------------------
+import excel using "Figuras_2A_y_3.xlsx", ///
+    sheet("Public goods contributions") cellrange(A17:Q26) clear
+ 
+rename (A B C D E F G H I J K L M N O P Q)                                    ///
+       (periodo grupo1 grupo2 grupo3 grupo4 grupo5 grupo6 grupo7 grupo8       ///
+        grupo9 grupo10 grupo11 grupo12 grupo13 grupo14 grupo15 grupo16)
+ 
+generate castigo = 1          // 1 = experimento con castigo
+ 
+* 2.3 Pegar los dos bloques uno debajo del otro
+*------------------------------------------------------------------------------
+append using "temporal_sin_castigo.dta"
+erase "temporal_sin_castigo.dta"
+ 
+label define etiq_castigo 0 "Sin castigo" 1 "Con castigo"
+label values castigo etiq_castigo
+label variable periodo "Período (1 a 10)"
+label variable castigo "Experimento"
+ 
+count
+assert _N == 20                           // 10 períodos x 2 experimentos
+ 
+sort castigo periodo
+save "herrmann_ancho.dta", replace
+ 
+* 2.4 Una segunda versión de la misma base, en formato largo
+*------------------------------------------------------------------------------
+* En la base "ancha" cada grupo de participantes está en una columna distinta
+* (grupo1, grupo2, ...). Eso sirve para calcular promedios fila por fila.
+* Para las pruebas t se necesita lo contrario: que cada grupo sea una fila.
+* "reshape long" hace esa conversión. Se guardan las dos versiones porque cada
+* parte del taller usa la que le resulta más cómoda.
+reshape long grupo, i(periodo castigo) j(ciudad)
+ 
+rename grupo contribucion
+label variable contribucion "Contribución promedio del grupo (tokens)"
+label variable ciudad       "Grupo de participantes"
+ 
+* Nombres de las 16 ciudades, en el orden de las columnas B a Q del Excel.
+label define etiq_ciudad 1 "Copenhague" 2 "Dnipropetrovsk" 3 "Minsk"          ///
+    4 "San Galo" 5 "Mascate" 6 "Samara" 7 "Zurich" 8 "Boston" 9 "Bonn"        ///
+    10 "Chengdu" 11 "Seul" 12 "Riad" 13 "Nottingham" 14 "Atenas"              ///
+    15 "Estambul" 16 "Melbourne"
+label values ciudad etiq_ciudad
+ 
+count
+assert _N == 320                          // 16 ciudades x 10 períodos x 2 experimentos
+ 
+save "herrmann_largo.dta", replace
+display as result "Bases de Herrmann listas: herrmann_ancho.dta y herrmann_largo.dta"
+ 
+ 
+*===============================================================================
+* PARTE 3. PARTE 2.1 DEL TALLER — EL JUEGO DE CLASE  (P2.1.1 a P2.1.4)
+*===============================================================================
+ 
+use "juego_propio.dta", clear
+ 
+*------------------------------------------------------------------------------
+* P2.1.1  Contribución promedio por período
+*------------------------------------------------------------------------------
+display as result "=== Juego 1: contribución promedio por ronda ==="
+tabstat contribucion if juego==1, by(ronda) statistics(n mean sd min max) format(%9.2f)
+ 
+display as result "=== Juego 2: contribución promedio por ronda ==="
+tabstat contribucion if juego==2, by(ronda) statistics(n mean sd min max) format(%9.2f)
+ 
+display as result "=== Los dos juegos juntos ==="
+tabstat contribucion, by(ronda) statistics(n mean sd min max) format(%9.2f)
+ 
+*--- Tablas de apoyo, guardadas como archivo ------------------------------------
+* "preserve" guarda una copia de los datos y "restore" la devuelve al final.
+* Sirve para hacer cuentas sin perder la base original.
+preserve
+    collapse (count) n=contribucion (mean) media=contribucion                  ///
+             (sd) desviacion=contribucion (min) minimo=contribucion            ///
+             (max) maximo=contribucion, by(juego ronda)
+    export delimited using "Tables/tabla_A1_juego_propio_por_ronda.csv", replace
+restore
+ 
+preserve
+    collapse (count) n=contribucion (mean) media=contribucion                  ///
+             (sd) desviacion=contribucion (min) minimo=contribucion            ///
+             (max) maximo=contribucion, by(ronda)
+    export delimited using "Tables/tabla_A2_juego_propio_pooled.csv", replace
+restore
+ 
+*--- Gráfico de líneas ----------------------------------------------------------
+preserve
+    * Un promedio por juego y por ronda
+    collapse (mean) contribucion, by(juego ronda)
+ 
+    * Pasar a formato ancho: una columna por juego, para poder dibujar dos líneas
+    reshape wide contribucion, i(ronda) j(juego)
+    rename contribucion1 juego1
+    rename contribucion2 juego2
+
+    label variable juego1 "Juego 1"
+    label variable juego2 "Juego 2"
+ 
+    * Los colores se escriben como "rojo verde azul", de 0 a 255:
+    *   "42 120 214" = azul       "235 104 52" = naranja
+    twoway (connected juego1 ronda,                                             ///
+                lcolor("42 120 214") mcolor("42 120 214")                       ///
+                lwidth(medthick) msymbol(O))                                    ///
+           (connected juego2 ronda,                                             ///
+                lcolor("235 104 52") mcolor("235 104 52")                       ///
+                lwidth(medthick) msymbol(T) lpattern(dash)),                    ///
+        title("Contribución promedio por período", size(medium))                ///
+        subtitle("Juego de bienes públicos jugado en clase")                    ///
+        xtitle("Período") ytitle("Contribución promedio (€)")                   ///
+        xlabel(1(1)10) ylabel(0(10)50, angle(horizontal) grid glcolor(gs14))    ///
+        legend(order(1 "Juego 1" 2 "Juego 2") rows(1) pos(6))                   ///
+        graphregion(color(white))
+ 
+    graph export "Figures/fig1_juego_propio_lineas.png", replace width(2200)
+restore
+ 
+* P2.1.2 y P2.1.3  Comparación con la Figura 3 de Herrmann et al. (2008)
+*------------------------------------------------------------------------------
+* Las dos series no están en la misma unidad (euros hasta 100 en clase, tokens
+* hasta 20 en el experimento), así que se expresan como porcentaje de su escala.
+preserve
+    collapse (mean) clase=contribucion, by(ronda)
+    rename ronda periodo
+    save "temporal_clase.dta", replace
+restore
+ 
+preserve
+    use "herrmann_ancho.dta", clear
+    egen promedio = rowmean(grupo1-grupo16)
+    keep periodo castigo promedio
+    reshape wide promedio, i(periodo) j(castigo)
+    rename promedio0 sin_castigo
+    rename promedio1 con_castigo
+ 
+    merge 1:1 periodo using "temporal_clase.dta"
+    drop _merge
+    erase "temporal_clase.dta"
+ 
+    generate clase_pct = 100*clase/100          // en clase el máximo observado fue 100 €
+    generate sin_pct   = 100*sin_castigo/20     // en Herrmann la dotación es 20 tokens
+ 
+    display as result "=== Las dos series, en niveles y en porcentaje ==="
+    list periodo clase clase_pct sin_castigo sin_pct, noobs clean
+restore
+ 
+* Dispersión detrás de cada promedio (para P2.1.3) ----
+display as result "=== Juego de clase: qué tan repartidas están las decisiones ==="
+tabstat contribucion, by(ronda) statistics(n mean sd min max p50) format(%9.2f)
+ 
+display as result "=== Cuántos aportaron 0 € y cuántos 100 € en la última ronda ==="
+count if ronda==10 & contribucion==0
+count if ronda==10 & contribucion==100
+
+*===============================================================================
+* PARTE 4. Descripción de datos  (P2.2.1 a P2.2.5)
+*
+* Aquí se usa la base ancha, donde cada fila es un período de un experimento y
+* las 16 columnas son cada grupo.
+* Los comandos "egen ... = row___()" calculan un estadístico a lo largo de la fila, 
+* es decir, entre los 16 grupos de ese período.
+*===============================================================================
+ 
+use "herrmann_ancho.dta", clear
+ 
+egen promedio   = rowmean(grupo1-grupo16)    // media de los 16 grupos
+egen desviacion = rowsd(grupo1-grupo16)      // desviación estándar muestral (n-1)
+egen minimo     = rowmin(grupo1-grupo16)     // el grupo que menos aportó
+egen maximo     = rowmax(grupo1-grupo16)     // el grupo que más aportó
+ 
+generate varianza = desviacion^2             // la varianza es la desviación al cuadrado
+generate rango    = maximo - minimo          // el rango es máximo menos mínimo
+ 
+* La desviación POBLACIONAL
+* divide entre n en vez de entre n-1. Con n = 16 se obtiene multiplicando
+* la muestral por la raíz de 15/16.
+generate desv_poblacional = desviacion*sqrt(15/16)
+ 
+* Regla práctica: ¿cuántos de los 16 grupos caen dentro de dos desviaciones
+* estándar de la media de su período? Se revisa grupo por grupo y se van sumando.
+generate dentro_2sd = 0
+forvalues i = 1/16 {
+    replace dentro_2sd = dentro_2sd + 1 ///
+        if grupo`i' > promedio - 2*desviacion & grupo`i' < promedio + 2*desviacion
+}
+ 
+format promedio desviacion desv_poblacional minimo maximo varianza rango %9.4f
+save "herrmann_descriptivas.dta", replace
+ 
+* P2.2.1  Contribución promedio por período en cada experimento
+*------------------------------------------------------------------------------
+display as result "=== SIN castigo: promedio por período ==="
+list periodo promedio if castigo==0, noobs clean
+ 
+display as result "=== CON castigo: promedio por período ==="
+list periodo promedio if castigo==1, noobs clean
+ 
+preserve
+    keep periodo castigo promedio
+    reshape wide promedio, i(periodo) j(castigo)
+    rename promedio0 sin_castigo
+    rename promedio1 con_castigo
+    generate diferencia = con_castigo - sin_castigo
+ 
+    display as result "=== Tabla 1: medias por período y diferencia ==="
+    list, noobs clean
+    export delimited using "Tables/tabla_1_medias_por_periodo.csv", replace
+ 
+    label variable sin_castigo "Sin castigo"
+    label variable con_castigo "Con castigo"
+ 
+        twoway (connected sin_castigo periodo,                                      ///
+                lcolor("42 120 214") mcolor("42 120 214")                       ///
+                lwidth(medthick) msymbol(O))                                    ///
+           (connected con_castigo periodo,                                      ///
+                lcolor("235 104 52") mcolor("235 104 52")                       ///
+                lwidth(medthick) msymbol(T) lpattern(dash)),                    ///
+        title("Contribución promedio por período, con y sin castigo", size(large)) ///
+        subtitle("Promedio de 16 grupos — Herrmann, Thöni y Gächter (2008)", size(medsmall)) ///
+        xtitle("Período", size(medlarge))                                       ///
+        ytitle("Contribución promedio" "(tokens de 20 posibles)", size(medlarge) margin(right)) ///
+        xlabel(1(1)10, labsize(medlarge))                                       ///
+        yscale(range(0 20))                                                     ///
+        ylabel(0(5)20, angle(horizontal) labsize(medlarge) format(%2.0f)        ///
+               grid glcolor(gs14))                                              ///
+        legend(order(1 "Sin castigo" 2 "Con castigo")    ///
+               rows(1) pos(6) size(medlarge))                                   ///
+        graphregion(color(white)) plotregion(margin(small))
+ 
+    graph export "Figures/fig2_herrmann_lineas.png", replace width(2200)
+restore
+ 
+* P2.2.2  Gráfico de columnas: primer y último período
+*------------------------------------------------------------------------------
+preserve
+    keep periodo castigo promedio
+    reshape wide promedio, i(periodo) j(castigo)
+    rename promedio0 sin_castigo
+    rename promedio1 con_castigo
+    keep if periodo==1 | periodo==10
+ 
+    graph bar (mean) sin_castigo con_castigo,                                   ///
+        over(periodo, relabel(1 "Período 1" 2 "Período 10"))                    ///
+        bar(1, color("42 120 214")) bar(2, color("235 104 52"))                 ///
+        blabel(bar, format(%9.2f))                                              ///
+        title("Contribución promedio en el primer y el último período", size(medium)) ///
+        subtitle("Promedio de 16 grupos de participantes")                      ///
+        ytitle("Contribución promedio (tokens)")                                ///
+        ylabel(0(2)16, angle(horizontal) grid glcolor(gs14))                    ///
+        legend(order(1 "Sin castigo" 2 "Con castigo") rows(1) pos(6))           ///
+        graphregion(color(white))
+ 
+    graph export "Figures/fig3_columnas_p1_p10.png", replace width(2200)
+restore
+ 
+* P2.2.3  Desviación estándar en los períodos 1 y 10, y la regla práctica
+*------------------------------------------------------------------------------
+display as result "=== Desviación estándar y regla práctica (períodos 1 y 10) ==="
+list castigo periodo promedio desviacion desv_poblacional dentro_2sd ///
+    if periodo==1 | periodo==10, noobs clean abbreviate(16)
+ 
+* Los límites del intervalo media +/- 2 desviaciones, para citarlos en el texto
+display as result "=== Intervalo media +/- 2 desviaciones ==="
+generate lim_inf = promedio - 2*desviacion
+generate lim_sup = promedio + 2*desviacion
+format lim_inf lim_sup %9.4f
+list castigo periodo promedio lim_inf lim_sup dentro_2sd ///
+    if periodo==1 | periodo==10, noobs clean
+ 
+* P2.2.4  Valores máximo y mínimo en los períodos 1 y 10
+*------------------------------------------------------------------------------
+display as result "=== Mínimos, máximos y rango (períodos 1 y 10) ==="
+list castigo periodo minimo maximo rango if periodo==1 | periodo==10, noobs clean
+ 
+* Para saber qué ciudad marca cada extremo se usa la base larga, la cual se ordena de
+* menor a mayor y se listan las 16. La primera de la lista es el mínimo y la
+* última es el máximo.
+preserve
+    use "herrmann_largo.dta", clear
+    sort contribucion
+    display as result "=== Período 1, sin castigo: las 16 ciudades ordenadas ==="
+    list ciudad contribucion if periodo==1  & castigo==0, noobs clean
+    display as result "=== Período 10, sin castigo ==="
+    list ciudad contribucion if periodo==10 & castigo==0, noobs clean
+    display as result "=== Período 1, con castigo ==="
+    list ciudad contribucion if periodo==1  & castigo==1, noobs clean
+    display as result "=== Período 10, con castigo ==="
+    list ciudad contribucion if periodo==10 & castigo==1, noobs clean
+restore
+ 
+* P2.2.5  Tabla de estadísticas descriptivas
+*------------------------------------------------------------------------------
+preserve
+    keep if periodo==1 | periodo==10
+    keep castigo periodo promedio varianza desviacion minimo maximo rango
+    order castigo periodo promedio varianza desviacion minimo maximo rango
+ 
+    display as result "=== Tabla 2: estadísticas descriptivas ==="
+    list, noobs clean
+    export delimited using "Tables/tabla_2_descriptivas_p1_p10.csv", replace
+restore
+ 
+* Figura de apoyo: rango (mínimo a máximo) entre las 16 ciudades, por período.
+*------------------------------------------------------------------------------
+preserve
+    keep periodo castigo promedio minimo maximo
+    reshape wide promedio minimo maximo, i(periodo) j(castigo)
+ 
+    twoway (rarea minimo0 maximo0 periodo, color(ltblue) lwidth(none))           ///
+           (rarea minimo1 maximo1 periodo, color(sand)   lwidth(none))           ///
+           (connected promedio0 periodo,                                         ///
+                lcolor("42 120 214") mcolor("42 120 214") msymbol(O))            ///
+           (connected promedio1 periodo,                                         ///
+                lcolor("235 104 52") mcolor("235 104 52") msymbol(T)             ///
+                lpattern(dash)),                                                 ///
+        title("Rango de contribuciones entre los 16 grupos", size(medium))       ///
+        subtitle("Las áreas sombreadas van del mínimo al máximo")                ///
+        xtitle("Período") ytitle("Contribución (tokens)")                        ///
+        xlabel(1(1)10) ylabel(0(4)20, angle(horizontal) grid glcolor(gs14))      ///
+        legend(order(3 "Sin castigo" 4 "Con castigo") rows(1) pos(6))            ///
+        graphregion(color(white))
+ 
+    graph export "Figures/fig4_rango_por_periodo.png", replace width(2200)
+restore
+ 
+ 
+*===============================================================================
+* PARTE 5. pruebas t
+*
+* La prueba t responde: si en realidad NO hubiera diferencia entre los dos
+* experimentos, ¿qué tan probable sería ver por pura casualidad una diferencia
+* tan grande como la que vemos? Esa probabilidad es el valor p.
+*===============================================================================
+ 
+use "herrmann_largo.dta", clear
+ 
+* P2.3.2  Período 1
+*------------------------------------------------------------------------------
+display as result "### PERÍODO 1 — muestras independientes (varianzas iguales) ###"
+ttest contribucion if periodo==1, by(castigo)
+ 
+display as result "### PERÍODO 1 — muestras independientes (Welch) ###"
+ttest contribucion if periodo==1, by(castigo) unequal welch
+ 
+* P2.3.3  Período 10
+*------------------------------------------------------------------------------
+display as result "### PERÍODO 10 — muestras independientes (varianzas iguales) ###"
+ttest contribucion if periodo==10, by(castigo)
+ 
+display as result "### PERÍODO 10 — muestras independientes (Welch) ###"
+ttest contribucion if periodo==10, by(castigo) unequal welch
+ 
+*------------------------------------------------------------------------------
+* Prueba t PAREADA
+*
+* Las mismas 16 ciudades jugaron los dos experimentos, así que cada ciudad se
+* puede comparar consigo misma: Copenhague con castigo contra Copenhague sin
+* castigo, y así con las 16. Para eso se necesita una columna por experimento.
+*------------------------------------------------------------------------------
+use "herrmann_largo.dta", clear
+keep if periodo==1 | periodo==10
+keep ciudad periodo castigo contribucion
+ 
+reshape wide contribucion, i(ciudad periodo) j(castigo)
+rename contribucion0 sin_castigo
+rename contribucion1 con_castigo
+ 
+display as result "### PERÍODO 1 — prueba t pareada ###"
+ttest con_castigo == sin_castigo if periodo==1
+ 
+display as result "### PERÍODO 10 — prueba t pareada ###"
+ttest con_castigo == sin_castigo if periodo==10
+ 
+* Diferencia ciudad por ciudad en el período 10, la cual sirve para mostrar que el signo
+* es el mismo en las 16 (ninguna excepción).
+generate diferencia = con_castigo - sin_castigo
+display as result "=== Diferencia (con - sin) en el período 10, ciudad por ciudad ==="
+list ciudad diferencia if periodo==10, noobs clean
+ 
+* P2.3.4  Comparación de los dos experimentos en el período 1 (línea base)
+*------------------------------------------------------------------------------
+use "herrmann_largo.dta", clear
+display as result "=== Balance en el período 1: media, dispersión y rango ==="
+tabstat contribucion if periodo==1, by(castigo) ///
+    statistics(n mean sd min max) format(%9.4f)
+ 
+*--- Figura de apoyo: las 16 ciudades, una por una ------------------------------
+* Cada punto es una ciudad. Sirve para ver que en el período 1 las dos nubes se
+* mezclan y en el período 10 se separan (la idea de las Figuras 2.7 y 2.8).
+keep if periodo==1 | periodo==10
+ 
+generate posicion = .
+replace posicion = 1 if periodo==1  & castigo==0
+replace posicion = 2 if periodo==1  & castigo==1
+replace posicion = 4 if periodo==10 & castigo==0
+replace posicion = 5 if periodo==10 & castigo==1
+ 
+twoway (scatter contribucion posicion if castigo==0,                            ///
+            mcolor("42 120 214") msymbol(O) jitter(4))                          ///
+       (scatter contribucion posicion if castigo==1,                            ///
+            mcolor("235 104 52") msymbol(T) jitter(4)),                         ///
+    title("Cada punto es uno de los 16 grupos de participantes", size(medium))  ///
+    ytitle("Contribución promedio del grupo (tokens)") xtitle("")               ///
+    xlabel(1 "P1 sin castigo" 2 "P1 con castigo"                                ///
+           4 "P10 sin castigo" 5 "P10 con castigo", labsize(small))             ///
+    ylabel(0(5)20, angle(horizontal) grid glcolor(gs14))                        ///
+    legend(order(1 "Sin castigo" 2 "Con castigo") rows(1) pos(6))               ///
+    graphregion(color(white))
+ 
+graph export "Figures/fig5_dispersion_p1_p10.png", replace width(2200)
+ 
+ 
+*===============================================================================
+* PARTE 6. Experimento moneda
+*===============================================================================
+ 
+capture confirm file "lanzamientos_moneda.csv"
+if _rc != 0 {
+    display as error "No se encontró lanzamientos_moneda.csv. P2.3.1 queda pendiente."
+}
+else {
+    import delimited using "lanzamientos_moneda.csv", clear varnames(1) stringcols(3)
+ 
+    capture confirm string variable resultado
+    if _rc != 0 {
+        display as error "La plantilla está vacía: registren primero los lanzamientos reales."
+    }
+    else {
+        replace resultado = lower(trim(resultado))
+        drop if resultado == ""
+        assert resultado=="cara" | resultado=="sello"
+ 
+        generate cara = 0
+        replace  cara = 1 if resultado=="cara"
+ 
+        display as result "=== Número de caras en cada tanda ==="
+        tabstat cara, by(tanda) statistics(sum n mean) format(%9.3f)
+ 
+        display as result "=== Secuencia de cada tanda ==="
+        sort tanda lanzamiento
+        list tanda lanzamiento resultado, noobs clean
+ 
+        export delimited using "Tables/tabla_4_moneda.csv", replace
+    }
+}
+ 
+ 
+* FIN
+*===============================================================================
+log close
