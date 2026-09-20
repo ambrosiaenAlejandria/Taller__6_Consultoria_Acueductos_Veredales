@@ -1,4 +1,44 @@
+* ==============================================================
+* Taller: Parte 2.1 Recolectando datos jugando
+* Herrmann et al. (2008) - Figura 3 
+* Archivo: doing-economics-datafile-working-in-excel-project-2 (1).xlsx
+* ==============================================================
+clear
+input periodo c_sin_castigo c_con_castigo
+1  44.38 44.55
+2  37.67 37.00
+3  33.71 37.14
+4  16.90 18.00
+5  18.95 22.86
+6   8.86 11.24
+7  16.14 16.90
+8  11.00  9.05
+9   6.76  5.62
+10 12.86 12.14
+end
 
+* Configurar el eje del periodo como entero de 1 a 10
+label variable periodo "Periodo"
+label variable c_sin_castigo "Sin Castigo (Juego 1)"
+label variable c_con_castigo "Con Castigo (Juego 2)"
+
+* ------------------------------------------------------------------------------
+* P2.1.1: Gráfico de líneas de la contribución promedio por periodo
+* ------------------------------------------------------------------------------
+graph twoway ///
+    (line c_sin_castigo periodo, lcolor(navy) lwidth(medthick) msymbol(O) mcolor(navy)) ///
+    (line c_con_castigo periodo, lcolor(cranberry) lwidth(medthick) lpattern(dash) msymbol(T) mcolor(cranberry)), ///
+    xlabel(1(1)10) ///
+    ylabel(0(10)50, grid) ///
+    title("Contribución Promedio por Periodo", size(medium)) ///
+    subtitle("Comparación entre Juego Sin Castigo y Con Castigo") ///
+    xtitle("Periodo") ///
+    ytitle("Contribución Promedio (€)") ///
+    legend(order(1 "Sin Castigo" 2 "Con Castigo") rows(1) pos(6)) ///
+    graphregion(color(white))
+
+* Guardar el gráfico
+graph export "grafico_contribuciones_p211.png", replace
 * ==============================================================
 * Taller: Parte 2.2 Describiendo datos
 * Herrmann et al. (2008) - Figuras 2A y 3
