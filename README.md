@@ -1,4 +1,4 @@
-# Taller 6 - Consultoria de acueductos veredalres
+# Taller 6 - Consultoria de acueductos veredales
 ## Roles-------------------
 #### Líder del proyecto y enlace con la ONG: Emanuel Hernández
 #### Especialista en datos y reproducibilidad: Danna Romero
