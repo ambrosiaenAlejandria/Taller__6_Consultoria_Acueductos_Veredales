@@ -221,10 +221,10 @@ preserve
     * Los colores se escriben como "rojo verde azul", de 0 a 255:
     *   "42 120 214" = azul       "235 104 52" = naranja
     twoway (connected juego1 ronda,                                             ///
-                lcolor("42 120 214") mcolor("42 120 214")                       ///
+                lcolor("26 71 111") mcolor("26 71 111")                       ///
                 lwidth(medthick) msymbol(O))                                    ///
            (connected juego2 ronda,                                             ///
-                lcolor("235 104 52") mcolor("235 104 52")                       ///
+                lcolor("143 36 53") mcolor("143 36 53")                       ///
                 lwidth(medthick) msymbol(T) lpattern(dash)),                    ///
         title("Contribución promedio por período", size(medium))                ///
         subtitle("Juego de bienes públicos jugado en clase")                    ///
@@ -334,12 +334,12 @@ preserve
                 lcolor("42 120 214") mcolor("42 120 214")                       ///
                 lwidth(medthick) msymbol(O))                                    ///
            (connected con_castigo periodo,                                      ///
-                lcolor("235 104 52") mcolor("235 104 52")                       ///
+                lcolor("245 11 11") mcolor("245 11 11")                       ///
                 lwidth(medthick) msymbol(T) lpattern(dash)),                    ///
         title("Contribución promedio por período, con y sin castigo", size(large)) ///
         subtitle("Promedio de 16 grupos — Herrmann, Thöni y Gächter (2008)", size(medsmall)) ///
         xtitle("Período", size(medlarge))                                       ///
-        ytitle("Contribución promedio" "(tokens de 20 posibles)", size(medlarge) margin(right)) ///
+        ytitle("Contribución promedio" "(medido en fichas)", size(medlarge) margin(right)) ///
         xlabel(1(1)10, labsize(medlarge))                                       ///
         yscale(range(0 20))                                                     ///
         ylabel(0(5)20, angle(horizontal) labsize(medlarge) format(%2.0f)        ///
@@ -362,11 +362,11 @@ preserve
  
     graph bar (mean) sin_castigo con_castigo,                                   ///
         over(periodo, relabel(1 "Período 1" 2 "Período 10"))                    ///
-        bar(1, color("42 120 214")) bar(2, color("235 104 52"))                 ///
+        bar(1, color("42 120 214")) bar(2, color("245 11 11"))                 ///
         blabel(bar, format(%9.2f))                                              ///
         title("Contribución promedio en el primer y el último período", size(medium)) ///
         subtitle("Promedio de 16 grupos de participantes")                      ///
-        ytitle("Contribución promedio (tokens)")                                ///
+        ytitle("Contribución promedio (fichas)")                                ///
         ylabel(0(2)16, angle(horizontal) grid glcolor(gs14))                    ///
         legend(order(1 "Sin castigo" 2 "Con castigo") rows(1) pos(6))           ///
         graphregion(color(white))
